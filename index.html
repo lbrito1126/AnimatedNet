@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>eyes</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:100%; height:100%; background:#04050a; overflow:hidden;
+    cursor:none; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
+  #wrap { position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse 75% 65% at 50% 50%, #0a0d16 0%, #04050a 72%); }
+  canvas { width:100%; height:100%; image-rendering:pixelated; }
+  #moodhit { position:fixed; right:0; bottom:0; width:20vw; height:20vh; z-index:5; }
+  #label { position:fixed; left:50%; bottom:5%; transform:translateX(-50%);
+    font-family:ui-monospace,Menlo,Consolas,monospace; font-size:2.4vh; letter-spacing:.35em;
+    color:rgba(180,205,255,0); text-transform:uppercase; transition:color .25s; pointer-events:none;
+    text-shadow:0 0 12px rgba(120,160,255,.6); }
+  #label.show { color:rgba(180,205,255,.75); }
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="c"></canvas></div>
+<div id="label"></div>
+<div id="moodhit"></div>
+<script>
+(function(){
+  const c=document.getElementById('c'), ctx=c.getContext('2d');
+  const label=document.getElementById('label');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const COLS=96, ROWS=40; let W,H,cell;
+  function resize(){ W=innerWidth;H=innerHeight;c.width=W;c.height=H;cell=Math.min(W/COLS,H/ROWS);}
+  addEventListener('resize',resize); resize();
+
+  const bayer=[[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]].map(r=>r.map(v=>(v+0.5)/16));
+  function roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); ctx.fill(); }
+
+  function render(field, glow, t){
+    ctx.clearRect(0,0,W,H);
+    const gw=COLS*cell,gh=ROWS*cell,ox=(W-gw)/2,oy=(H-gh)/2;
+    const dot=cell*0.72, rr=dot*0.28;
+    const breath=0.85+0.15*(0.5+0.5*Math.sin(t/2500));
+    for(let row=0;row<ROWS;row++) for(let col=0;col<COLS;col++){
+      let v=field(col,row); if(v<=0)continue;
+      v*=breath; const th=bayer[row&3][col&3]; if(v<th*0.9)continue;
+      const a=Math.min(1,v);
+      ctx.fillStyle=`rgba(${Math.floor(glow[0]*(0.8+0.2*v))},${Math.floor(glow[1]*(0.85+0.15*v))},255,${a})`;
+      roundRect(ox+col*cell+(cell-dot)/2, oy+row*cell+(cell-dot)/2, dot,dot,rr);
+    }
+    ctx.fillStyle='rgba(0,0,10,0.18)';
+    for(let y=0;y<H;y+=Math.max(2,cell*0.5)) ctx.fillRect(0,y,W,1);
+  }
+
+  /* ================= EYES MODE ================= */
+  const eyeCX=[COLS*0.30,COLS*0.70], eyeCY=ROWS*0.5, eyeRX=COLS*0.16, eyeRY=ROWS*0.30;
+  const MOODS=[
+    { name:'focus', lidTilt:0.10, topCut:0.05, squint:0.00, curve:0.00, glow:[210,225,255] },
+    { name:'sharp', lidTilt:0.34, topCut:0.10, squint:0.18, curve:0.05, glow:[190,215,255] },
+    { name:'wide',  lidTilt:0.00, topCut:-0.10,squint:-0.10,curve:0.00, glow:[220,235,255] },
+    { name:'scan',  lidTilt:0.20, topCut:0.05, squint:0.30, curve:0.00, glow:[160,220,255] },
+    { name:'chill', lidTilt:-0.28,topCut:0.18, squint:0.05, curve:0.10, glow:[210,225,255] }
+  ];
+  let mood=0, gazeX=0,gazeY=0,tgX=0,tgY=0,lid=0,blinking=false;
+  function newTarget(){ tgX=(Math.random()*2-1)*(COLS*0.05); tgY=(Math.random()*2-1)*(ROWS*0.045);
+    setTimeout(newTarget,2600+Math.random()*3600); }
+  function doBlink(dbl){ if(blinking)return; blinking=true; const s=performance.now(),dur=150;
+    (function step(now){ let p=(now-s)/dur; if(p>1)p=1; lid=p<0.5?p*2:2-p*2;
+      if(p<1)requestAnimationFrame(step);
+      else{lid=0;blinking=false; if(dbl&&Math.random()<0.25)setTimeout(()=>doBlink(false),150);} })(s); }
+  function scheduleBlink(){ if(mode==='eyes')doBlink(true); setTimeout(scheduleBlink,3400+Math.random()*4200); }
+  function eyeField(col,row){
+    const m=MOODS[mood];
+    gazeX+=(tgX-gazeX)*0.05; gazeY+=(tgY-gazeY)*0.05;
+    for(let e=0;e<2;e++){
+      const cx=eyeCX[e]+gazeX, cy=eyeCY+gazeY;
+      let nx=(col-cx)/eyeRX, ny=(row-cy)/eyeRY, d=nx*nx+ny*ny;
+      if(d>1) continue;
+      const tiltDir=(cx<COLS/2)?-1:1;
+      const lidLine=(-0.15+m.topCut)+(m.lidTilt*tiltDir)*nx+m.curve*(nx*nx-0.4);
+      if(ny<lidLine) continue;
+      const botLine=1-m.squint; if(ny>botLine) continue;
+      const openFrac=1-lid, visibleTop=lidLine+(botLine-lidLine)*(1-openFrac);
+      if(ny<visibleTop) continue;
+      return Math.max(0,Math.min(1,0.4+(1-d)*0.85));
+    }
+    return 0;
+  }
+
+  /* ============== CYBERSIGIL MODE ==============
+     ringed core + sharp cardinal spikes + branching thorn tendrils,
+     morphs shape over time. sharp + technical, LED stipple. */
+  // precompute a set of "branches": each is a jagged polyline growing from center.
+  let sig=null, sigNextMorph=0;
+  function buildSigil(t){
+    const branches=[];
+    // main vertical tendrils (up & down) - long jagged cracks like the ref
+    const verts=[-1,1];
+    for(const dir of verts){
+      const seg=[]; let x=0,y=0, ang=dir<0?-Math.PI/2:Math.PI/2;
+      const steps=7+Math.floor(Math.random()*4);
+      for(let i=0;i<steps;i++){
+        ang += (Math.random()*2-1)*0.5;
+        const len=0.10+Math.random()*0.10;
+        x+=Math.cos(ang)*len; y+=Math.sin(ang)*len;
+        seg.push([x,y, 1-i/steps]);       // taper thickness
+        // occasional small offshoot
+        if(Math.random()<0.4 && i>1){
+          let bx=x,by=y,ba=ang+(Math.random()<0.5?1:-1)*(0.6+Math.random()*0.5);
+          const bs=2+Math.floor(Math.random()*3); const off=[];
+          for(let j=0;j<bs;j++){ ba+=(Math.random()*2-1)*0.4; const bl=0.06+Math.random()*0.06;
+            bx+=Math.cos(ba)*bl; by+=Math.sin(ba)*bl; off.push([bx,by,0.5*(1-j/bs)]); }
+          branches.push(off);
+        }
+      }
+      branches.push(seg);
+    }
+    // horizontal + diagonal sharp spikes (the 4-point star burst), straight & tapering
+    const spikeCount=4+Math.floor(Math.random()*3);
+    for(let s=0;s<spikeCount;s++){
+      const a=(s/spikeCount)*Math.PI*2 + (Math.random()*0.3-0.15);
+      const len=0.5+Math.random()*0.45;
+      const seg=[]; const steps=6;
+      for(let i=1;i<=steps;i++){ const r=(i/steps)*len;
+        seg.push([Math.cos(a)*r, Math.sin(a)*r, 1-i/steps]); }
+      branches.push(seg);
+    }
+    return { branches, ring:0.14+Math.random()*0.04, rot:Math.random()*Math.PI };
+  }
+  function sigilField(col,row,t){
+    if(!sig || t>sigNextMorph){ sig=buildSigil(t); sigNextMorph=t+4500+Math.random()*3500; }
+    const cx=COLS*0.5, cy=ROWS*0.5;
+    // normalize to same aspect as grid feel
+    let x=(col-cx)/(COLS*0.30), y=(row-cy)/(ROWS*0.46);
+    const ang=t*0.00010 + sig.rot;         // slow overall rotation
+    const ca=Math.cos(ang),sa=Math.sin(ang);
+    let rx=x*ca-y*sa, ry=x*sa+y*ca;
+    const r=Math.sqrt(rx*rx+ry*ry);
+    if(r>1.25) return 0;
+    let v=0;
+    // --- central ring (bright open circle) ---
+    const ringW=0.045;
+    v=Math.max(v, Math.max(0,1-Math.abs(r-sig.ring)/ringW)*0.95);
+    // hollow center stays dark (ref has open middle) -> nothing inside ring
+    // --- branches: distance to each polyline segment ---
+    const px=rx, py=ry;
+    for(const seg of sig.branches){
+      for(let i=1;i<seg.length;i++){
+        const ax=seg[i-1][0],ay=seg[i-1][1],bx=seg[i][0],by=seg[i][1];
+        const th=seg[i][2];
+        // dist from point to segment
+        const dx=bx-ax,dy=by-ay; const L2=dx*dx+dy*dy||1e-6;
+        let u=((px-ax)*dx+(py-ay)*dy)/L2; u=Math.max(0,Math.min(1,u));
+        const qx=ax+u*dx, qy=ay+u*dy;
+        const dist=Math.hypot(px-qx,py-qy);
+        const width=0.015+0.05*th;          // taper: thicker near center
+        const val=Math.max(0,1-dist/width);
+        if(val>v) v=val*(0.6+0.4*th);
+      }
+    }
+    // pulse
+    v*=(0.75+0.25*(0.5+0.5*Math.sin(t/1700)));
+    return Math.min(1,v);
+  }
+
+  /* ================= MODE MGMT ================= */
+  let mode='eyes';
+  const SIG_GLOW=[195,218,255];
+  function loop(now){
+    const t=now||0;
+    if(mode==='eyes') render(eyeField, MOODS[mood].glow, t);
+    else render((col,row)=>sigilField(col,row,t), SIG_GLOW, t);
+    requestAnimationFrame(loop);
+  }
+  function flash(txt){ label.textContent=txt; label.classList.add('show');
+    clearTimeout(label._t); label._t=setTimeout(()=>label.classList.remove('show'),900); }
+
+  document.getElementById('moodhit').addEventListener('pointerdown',e=>{
+    e.stopPropagation();
+    if(mode==='eyes'){ mood=(mood+1)%MOODS.length; flash(MOODS[mood].name); doBlink(false); }
+  });
+  document.getElementById('wrap').addEventListener('pointerdown',e=>{
+    const x=e.clientX/W;
+    if(x<0.5){ if(mode!=='sigil'){mode='sigil'; sig=null; flash('sigil');} }
+    else { if(mode!=='eyes'){mode='eyes'; flash('eyes'); doBlink(false);} else doBlink(true); }
+  });
+  addEventListener('keydown',e=>{
+    if(e.key==='ArrowLeft'){mode='sigil';sig=null;flash('sigil');}
+    else if(e.key==='ArrowRight'){mode='eyes';flash('eyes');}
+    else if(e.key===' '){e.preventDefault(); if(mode==='eyes'){mood=(mood+1)%MOODS.length;flash(MOODS[mood].name);doBlink(false);}}
+  });
+
+  if(!reduce){ newTarget(); setTimeout(scheduleBlink,1600); }
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
