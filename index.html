@@ -17,21 +17,64 @@
     color:rgba(180,205,255,0); text-transform:uppercase; transition:color .25s; pointer-events:none;
     text-shadow:0 0 12px rgba(120,160,255,.6); }
   #label.show { color:rgba(180,205,255,.75); }
+  /* hidden settings tab: invisible hotspot in the top-right corner */
+  #settingshit { position:fixed; right:0; top:0; width:16vw; height:14vh; z-index:6; }
+  #panel { position:fixed; top:2.2vh; right:2.2vw; z-index:7; width:min(80vw,300px);
+    padding:14px 14px 16px; border:1px solid rgba(120,160,255,.35);
+    background:rgba(6,9,16,.82); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    border-radius:12px; box-shadow:0 10px 44px rgba(0,0,0,.6);
+    font-family:ui-monospace,Menlo,Consolas,monospace; color:#bcd2ff;
+    transform-origin:top right; transition:opacity .18s ease, transform .18s ease; }
+  #panel.hidden { opacity:0; transform:scale(.92) translateY(-6px); pointer-events:none; }
+  #panel .phead { display:flex; justify-content:space-between; align-items:center;
+    font-size:12px; letter-spacing:.3em; text-transform:uppercase; color:#8fb0ff;
+    padding-bottom:10px; margin-bottom:8px; border-bottom:1px solid rgba(120,160,255,.18); }
+  #panel .phead button { background:none; border:none; color:#8fb0ff; font-size:20px; cursor:pointer; line-height:1; padding:0 4px; }
+  #panel .row { display:flex; align-items:center; gap:10px; margin:9px 0; }
+  #panel .lab { flex:0 0 60px; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:#7f9ad0; }
+  #panel .lab i { display:block; font-style:normal; font-size:9px; color:#5f7093; letter-spacing:.04em; margin-top:2px; }
+  #panel .segs { display:flex; flex-wrap:wrap; gap:6px; flex:1; }
+  #panel .seg { flex:1 1 auto; min-width:44px; padding:7px 8px; font:inherit; font-size:11px;
+    letter-spacing:.08em; text-transform:uppercase; color:#9fb6e6; cursor:pointer;
+    background:rgba(30,44,74,.5); border:1px solid rgba(120,160,255,.22); border-radius:7px;
+    transition:background .15s, color .15s, border-color .15s; }
+  #panel .seg.wide { flex:1 1 100%; }
+  #panel .seg:hover { border-color:rgba(150,185,255,.55); }
+  #panel .seg.on { background:rgba(120,160,255,.92); color:#04070f; border-color:rgba(180,210,255,.9);
+    box-shadow:0 0 14px rgba(120,160,255,.5); }
 </style>
 </head>
 <body>
 <div id="wrap"><canvas id="c"></canvas></div>
 <div id="label"></div>
 <div id="moodhit"></div>
+<div id="settingshit"></div>
+<div id="panel" class="hidden">
+  <div class="phead"><span>settings</span><button id="closebtn" aria-label="close">&times;</button></div>
+  <div class="row"><span class="lab">mode</span>
+    <div class="segs">
+      <button class="seg" data-mode="eyes">eyes</button>
+      <button class="seg" data-mode="sigil">sigil</button>
+    </div></div>
+  <div class="row" id="moodrow"><span class="lab">mood</span>
+    <div class="segs">
+      <button class="seg" data-mood="0">focus</button>
+      <button class="seg" data-mood="1">vigilant</button>
+      <button class="seg" data-mood="2">wide</button>
+      <button class="seg" data-mood="3">scan</button>
+      <button class="seg" data-mood="4">chill</button>
+    </div></div>
+  <div class="row"><span class="lab">smooth<i>older phones</i></span>
+    <div class="segs"><button class="seg" id="perf">OFF</button></div></div>
+  <div class="row"><div class="segs"><button class="seg wide" id="blinkbtn">blink</button></div></div>
+</div>
 <script>
 (function(){
   const c=document.getElementById('c'), ctx=c.getContext('2d');
   const label=document.getElementById('label');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  const COLS=120, ROWS=50;          // eyes grid
-  const SCOLS=144, SROWS=60;        // sigil grid: ~20% denser than eyes
-  let W,H,frameT=0;
+  let W,H,frameT=0, lowPower=false, lastDraw=0;
   function resize(){ W=innerWidth;H=innerHeight;c.width=W;c.height=H;}
   addEventListener('resize',resize); resize();
 
@@ -40,15 +83,15 @@
     ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
     ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); ctx.fill(); }
 
-  function render(field, glow, t, cols, rows, dotFrac, vignette, glitchAmt){
+  function render(field, glow, t, cols, rows, dotFrac, vignette, bloom, glitchAmt){
     ctx.clearRect(0,0,W,H);
     const cell=Math.min(W/cols,H/rows);
     const gw=cols*cell,gh=rows*cell,ox=(W-gw)/2,oy=(H-gh)/2;
     const dot=cell*dotFrac, rr=dot*0.26;
-    const breath=0.85+0.15*(0.5+0.5*Math.sin(t/2500));
+    const breath=0.85+0.15*(0.5+0.5*Math.sin(t/2000));
     const gl=glitchAmt||0;
     for(let row=0;row<rows;row++) for(let col=0;col<cols;col++){
-      let v=field(col,row); if(v<=0)continue;
+      let v=field(col/cols,row/rows); if(v<=0)continue;
       v*=breath; const th=bayer[row&3][col&3]; if(v<th*0.9)continue;
       // glitch the individual LEDs (jitter / flicker / colour-shift) - not the whole frame
       let jx=0,jy=0, rC=glow[0], gC=glow[1], bC=255;
@@ -69,10 +112,13 @@
     ctx.fillStyle='rgba(0,0,10,0.18)';
     for(let y=0;y<H;y+=Math.max(2,cell*0.5)) ctx.fillRect(0,y,W,1);
     // additive bloom: real glow + stronger contrast between the LEDs and the black
-    ctx.globalCompositeOperation='lighter';
-    ctx.globalAlpha=0.24; { const s=1.012; ctx.drawImage(c,-(W*(s-1))/2,-(H*(s-1))/2,W*s,H*s); }
-    ctx.globalAlpha=0.13; { const s=1.03;  ctx.drawImage(c,-(W*(s-1))/2,-(H*(s-1))/2,W*s,H*s); }
-    ctx.globalAlpha=1; ctx.globalCompositeOperation='source-over';
+    // (skipped in smooth mode - it's the most fill-rate heavy step on old GPUs)
+    if(bloom){
+      ctx.globalCompositeOperation='lighter';
+      ctx.globalAlpha=0.24; { const s=1.012; ctx.drawImage(c,-(W*(s-1))/2,-(H*(s-1))/2,W*s,H*s); }
+      ctx.globalAlpha=0.13; { const s=1.03;  ctx.drawImage(c,-(W*(s-1))/2,-(H*(s-1))/2,W*s,H*s); }
+      ctx.globalAlpha=1; ctx.globalCompositeOperation='source-over';
+    }
     if(vignette){
       // dark-room falloff: centre pixels keep glowing, outer edges go fully black
       const cxp=W/2, cyp=H/2, inner=Math.min(W,H)*0.30, outer=Math.max(W,H)*0.78;
@@ -86,7 +132,8 @@
   }
 
   /* ================= EYES MODE ================= */
-  const eyeCX=[COLS*0.30,COLS*0.70], eyeCY=ROWS*0.5, eyeRX=COLS*0.16, eyeRY=ROWS*0.30;
+  // normalized eye geometry (0..1 across the field) so grid resolution can change freely
+  const EYEX=[0.30,0.70], EYEY=0.5, ERX=0.16, ERY=0.30;
   // NOTE on lidTilt sign: negative => inner corners drop (alert/determined brow);
   // positive => outer corners drop (reads as sad). Keep <= 0 to avoid sad faces.
   const MOODS=[
@@ -97,30 +144,31 @@
     { name:'chill',    lidTilt:0.00, topCut:0.13, squint:0.10, curve:0.05,  glow:[205,222,255] }
   ];
   let mood=0, gazeX=0,gazeY=0,tgX=0,tgY=0,lid=0,blinking=false;
-  function newTarget(){ tgX=(Math.random()*2-1)*(COLS*0.05); tgY=(Math.random()*2-1)*(ROWS*0.045);
-    setTimeout(newTarget,2600+Math.random()*3600); }
-  function doBlink(dbl){ if(blinking)return; blinking=true; const s=performance.now(),dur=150;
+  function newTarget(){ tgX=(Math.random()*2-1)*0.05; tgY=(Math.random()*2-1)*0.045;
+    setTimeout(newTarget,2000+Math.random()*2800); }
+  function doBlink(dbl){ if(blinking)return; blinking=true; const s=performance.now(),dur=140;
     (function step(now){ let p=(now-s)/dur; if(p>1)p=1; lid=p<0.5?p*2:2-p*2;
       if(p<1)requestAnimationFrame(step);
       else{lid=0;blinking=false; if(dbl&&Math.random()<0.25)setTimeout(()=>doBlink(false),150);} })(s); }
-  function scheduleBlink(){ if(mode==='eyes')doBlink(true); setTimeout(scheduleBlink,3400+Math.random()*4200); }
-  function eyeField(col,row){
+  function scheduleBlink(){ if(mode==='eyes')doBlink(true); setTimeout(scheduleBlink,3200+Math.random()*3800); }
+  // ease the gaze once per frame (not per pixel) so it drifts smoothly
+  function stepEyes(){ gazeX+=(tgX-gazeX)*0.09; gazeY+=(tgY-gazeY)*0.09; }
+  function eyeField(u,w){
     const m=MOODS[mood];
-    gazeX+=(tgX-gazeX)*0.05; gazeY+=(tgY-gazeY)*0.05;
-    // slow "head" motion: both eyes track together as if a head turns / scans a room
-    const yaw   = 0.6*Math.sin(frameT/4300) + 0.25*Math.sin(frameT/1900+1.3);  // ~-0.85..0.85
-    const pitch = 0.4*Math.sin(frameT/5600+0.6);
-    const faceX = yaw*(COLS*0.05), faceY = pitch*(ROWS*0.04);
+    // "head" motion: both eyes track together as if a head turns / scans a room
+    const yaw   = 0.6*Math.sin(frameT/3600) + 0.25*Math.sin(frameT/1600+1.3);  // ~-0.85..0.85
+    const pitch = 0.4*Math.sin(frameT/4700+0.6);
+    const faceX = yaw*0.05, faceY = pitch*0.04;
     for(let e=0;e<2;e++){
       const side=e===0?-1:1;                         // -1 left eye, +1 right eye
       // perspective: eye toward the turn foreshortens (narrower), the other widens;
       // inter-eye spacing compresses slightly as the head turns off-centre
-      const rx = eyeRX*(1 - 0.18*yaw*side), ry = eyeRY*(1 - 0.05*Math.abs(yaw));
-      const cx = eyeCX[e] + gazeX + faceX - side*Math.abs(yaw)*(COLS*0.015);
-      const cy = eyeCY + gazeY + faceY;
-      let nx=(col-cx)/rx, ny=(row-cy)/ry, d=nx*nx+ny*ny;
+      const rx = ERX*(1 - 0.18*yaw*side), ry = ERY*(1 - 0.05*Math.abs(yaw));
+      const cx = EYEX[e] + gazeX + faceX - side*Math.abs(yaw)*0.015;
+      const cy = EYEY + gazeY + faceY;
+      let nx=(u-cx)/rx, ny=(w-cy)/ry, d=nx*nx+ny*ny;
       if(d>1) continue;
-      const tiltDir=(eyeCX[e]<COLS/2)?-1:1;
+      const tiltDir=(EYEX[e]<0.5)?-1:1;
       const lidLine=(-0.15+m.topCut)+(m.lidTilt*tiltDir)*nx+m.curve*(nx*nx-0.4);
       if(ny<lidLine) continue;
       const botLine=1-m.squint; if(ny>botLine) continue;
@@ -128,7 +176,7 @@
       if(ny<visibleTop) continue;
       // spherical shading: steeper rim falloff + a highlight that shifts with the
       // look direction, so the eye reads as a curved ball in a socket, not a flat disc
-      const hlx = 0.30*(gazeX/(COLS*0.05) + yaw), hly = -0.34;
+      const hlx = 0.30*(gazeX/0.05 + yaw), hly = -0.34;
       const hd  = (nx-hlx)*(nx-hlx) + (ny-hly)*(ny-hly);
       const shade = 0.26 + (1-d)*(1-d)*0.62 + Math.max(0,1-hd*1.5)*0.34;
       return Math.max(0,Math.min(1,shade));
@@ -140,7 +188,7 @@
      ringed core + sharp cardinal spikes + branching thorn tendrils,
      morphs shape over time. sharp + technical, LED stipple. */
   // precompute a set of "branches": each is a jagged polyline growing from center.
-  let sig=null, sigNextMorph=0, glStart=0, glEnd=0, glAmt=0;
+  let sig=null, sigOld=null, sigNextMorph=0, morphStart=-1e9, morphDur=1300, glStart=0, glEnd=0, glAmt=0;
   function triggerGlitch(now,dur,amt){ if(now+dur>glEnd){ glStart=now; glEnd=now+dur; } if(amt>glAmt) glAmt=amt; }
   function buildSigil(t){
     const branches=[];
@@ -192,75 +240,118 @@
     }
     return { branches, ring, rot:Math.random()*Math.PI };
   }
-  function sigilField(col,row,t){
-    // morph roughly every ~30s; the shape change is masked by a short pixel glitch
-    if(!sig || t>sigNextMorph){ sig=buildSigil(t); sigNextMorph=t+26000+Math.random()*9000; triggerGlitch(t,520+Math.random()*360,1.0); }
-    const cx=SCOLS*0.5, cy=SROWS*0.5;
-    // normalize to same aspect as grid feel
-    let x=(col-cx)/(SCOLS*0.30), y=(row-cy)/(SROWS*0.46);
-    const ang=t*0.00014 + sig.rot;         // slow overall rotation (a touch faster)
+  // schedule morphs once per frame; morph roughly every ~30s (masked by a short glitch)
+  function updateSigil(t){
+    if(!sig){ sig=buildSigil(t); sigNextMorph=t+7000+Math.random()*6000; return; }
+    if(t>sigNextMorph){
+      sigOld=sig; sig=buildSigil(t); morphStart=t;
+      sigNextMorph=t+26000+Math.random()*9000; triggerGlitch(t,520+Math.random()*360,1.0);
+    }
+  }
+  // sample one sigil shape at normalized (u,w). No side effects -> safe to call twice for a crossfade.
+  function sampleSig(sg,u,w,t){
+    let x=(u-0.5)/0.30, y=(w-0.5)/0.46;
+    const ang=t*0.00019 + sg.rot;          // continuous rotation (a touch faster)
     const ca=Math.cos(ang),sa=Math.sin(ang);
-    let rx=x*ca-y*sa, ry=x*sa+y*ca;
-    const r=Math.sqrt(rx*rx+ry*ry);
+    const px=x*ca-y*sa, py=x*sa+y*ca;
+    const r=Math.sqrt(px*px+py*py);
     if(r>1.25) return 0;
     let v=0;
-    // --- central ring (bright open circle) ---
     const ringW=0.038;
-    v=Math.max(v, Math.max(0,1-Math.abs(r-sig.ring)/ringW)*0.95);
-    // faint secondary outer ring for layered technical detail
-    const ring2=sig.ring*1.9;
+    v=Math.max(v, Math.max(0,1-Math.abs(r-sg.ring)/ringW)*0.95);
+    const ring2=sg.ring*1.9;
     v=Math.max(v, Math.max(0,1-Math.abs(r-ring2)/(ringW*0.7))*0.4);
-    // hollow center stays dark (ref has open middle) -> nothing inside ring
-    // --- branches: distance to each polyline segment ---
-    const px=rx, py=ry;
-    for(const seg of sig.branches){
+    const br=sg.branches;
+    for(let b=0;b<br.length;b++){
+      const seg=br[b];
       for(let i=1;i<seg.length;i++){
-        const ax=seg[i-1][0],ay=seg[i-1][1],bx=seg[i][0],by=seg[i][1];
-        const th=seg[i][2];
-        // dist from point to segment
+        const ax=seg[i-1][0],ay=seg[i-1][1],bx=seg[i][0],by=seg[i][1], th=seg[i][2];
         const dx=bx-ax,dy=by-ay; const L2=dx*dx+dy*dy||1e-6;
-        let u=((px-ax)*dx+(py-ay)*dy)/L2; u=Math.max(0,Math.min(1,u));
-        const qx=ax+u*dx, qy=ay+u*dy;
-        const dist=Math.hypot(px-qx,py-qy);
+        let uu=((px-ax)*dx+(py-ay)*dy)/L2; uu=uu<0?0:uu>1?1:uu;
+        const ex=px-(ax+uu*dx), ey=py-(ay+uu*dy);
+        const dist=Math.sqrt(ex*ex+ey*ey);
         const width=0.010+0.038*th;         // taper: thicker near center
-        const val=Math.max(0,1-dist/width);
-        if(val>v) v=val*(0.6+0.4*th);
+        const val=1-dist/width;
+        if(val>0){ const vv=val*(0.6+0.4*th); if(vv>v) v=vv; }
       }
     }
-    // pulse
-    v*=(0.75+0.25*(0.5+0.5*Math.sin(t/1700)));
-    return Math.min(1,v);
+    v*=(0.75+0.25*(0.5+0.5*Math.sin(t/1400)));   // pulse (a touch faster)
+    return v>1?1:v;
+  }
+  // crossfade previous -> next shape so a morph flows naturally instead of snapping
+  function sigField(u,w,t){
+    let v=sampleSig(sig,u,w,t);
+    if(t<morphStart+morphDur && sigOld){
+      const p=(t-morphStart)/morphDur, e=p*p*(3-2*p);   // smoothstep ease
+      v=v*e + sampleSig(sigOld,u,w,t)*(1-e);
+    }
+    return v;
   }
 
   /* ================= MODE MGMT ================= */
   let mode='eyes';
   const SIG_GLOW=[195,218,255];
   function loop(now){
-    const t=now||0; frameT=t;
+    const t=now||0;
+    // smooth mode: cap to ~33fps for a steady frame time on weak GPUs (motion is time-based)
+    if(lowPower && t-lastDraw<30){ requestAnimationFrame(loop); return; }
+    lastDraw=t; frameT=t;
     let gA=0;
     if(t<glEnd){ gA=glAmt*Math.max(0,1-(t-glStart)/(glEnd-glStart)); } else glAmt=0;
-    if(mode==='eyes') render(eyeField, MOODS[mood].glow, t, COLS, ROWS, 0.68, true, 0);
-    else render((col,row)=>sigilField(col,row,t), SIG_GLOW, t, SCOLS, SROWS, 0.578, true, gA);
+    if(mode==='eyes'){
+      stepEyes();
+      const eC=lowPower?96:120, eR=lowPower?40:50;
+      render(eyeField, MOODS[mood].glow, t, eC, eR, 0.68, true, !lowPower, 0);
+    } else {
+      updateSigil(t);
+      const sC=lowPower?108:144, sR=lowPower?46:60;
+      render((u,w)=>sigField(u,w,t), SIG_GLOW, t, sC, sR, 0.578, true, !lowPower, gA);
+    }
     requestAnimationFrame(loop);
   }
   function flash(txt){ label.textContent=txt; label.classList.add('show');
     clearTimeout(label._t); label._t=setTimeout(()=>label.classList.remove('show'),900); }
 
+  /* ---- central setters so on-screen taps, keys and the menu all stay in sync ---- */
+  function setMode(m){ if(m!==mode){ mode=m; if(m==='eyes')doBlink(false); flash(m); } updateUI(); }
+  function setMood(i){ mood=(i%MOODS.length+MOODS.length)%MOODS.length; flash(MOODS[mood].name);
+    if(mode==='eyes')doBlink(false); updateUI(); }
+  function setPerf(on){ lowPower=!!on; flash(on?'smooth on':'smooth off'); updateUI(); }
+  function updateUI(){
+    document.querySelectorAll('#panel [data-mode]').forEach(b=>b.classList.toggle('on', b.dataset.mode===mode));
+    document.querySelectorAll('#panel [data-mood]').forEach(b=>b.classList.toggle('on', +b.dataset.mood===mood));
+    const p=document.getElementById('perf'); p.textContent=lowPower?'ON':'OFF'; p.classList.toggle('on',lowPower);
+    document.getElementById('moodrow').style.opacity = mode==='eyes'?'1':'0.4';
+  }
+
   document.getElementById('moodhit').addEventListener('pointerdown',e=>{
-    e.stopPropagation();
-    if(mode==='eyes'){ mood=(mood+1)%MOODS.length; flash(MOODS[mood].name); doBlink(false); }
+    e.stopPropagation(); if(mode==='eyes') setMood(mood+1);
   });
   document.getElementById('wrap').addEventListener('pointerdown',e=>{
     const x=e.clientX/W;
-    if(x<0.5){ if(mode!=='sigil'){mode='sigil'; sig=null; flash('sigil');} }
-    else { if(mode!=='eyes'){mode='eyes'; flash('eyes'); doBlink(false);} else doBlink(true); }
+    if(x<0.5) setMode('sigil');
+    else { if(mode!=='eyes') setMode('eyes'); else doBlink(true); }
   });
   addEventListener('keydown',e=>{
-    if(e.key==='ArrowLeft'){mode='sigil';sig=null;flash('sigil');}
-    else if(e.key==='ArrowRight'){mode='eyes';flash('eyes');}
-    else if(e.key===' '){e.preventDefault(); if(mode==='eyes'){mood=(mood+1)%MOODS.length;flash(MOODS[mood].name);doBlink(false);}}
+    if(e.key==='ArrowLeft') setMode('sigil');
+    else if(e.key==='ArrowRight') setMode('eyes');
+    else if(e.key===' '){ e.preventDefault(); if(mode==='eyes') setMood(mood+1); }
+    else if(e.key.toLowerCase()==='s') setPerf(!lowPower);
   });
 
+  /* ---- hidden settings tab: tap the top-right corner ---- */
+  const panel=document.getElementById('panel');
+  function togglePanel(show){ const s = show===undefined ? panel.classList.contains('hidden') : show;
+    panel.classList.toggle('hidden', !s); }
+  document.getElementById('settingshit').addEventListener('pointerdown',e=>{ e.stopPropagation(); togglePanel(); });
+  panel.addEventListener('pointerdown',e=>e.stopPropagation());
+  panel.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('pointerdown',()=>setMode(b.dataset.mode)));
+  panel.querySelectorAll('[data-mood]').forEach(b=>b.addEventListener('pointerdown',()=>setMood(+b.dataset.mood)));
+  document.getElementById('perf').addEventListener('pointerdown',()=>setPerf(!lowPower));
+  document.getElementById('blinkbtn').addEventListener('pointerdown',()=>{ setMode('eyes'); doBlink(true); });
+  document.getElementById('closebtn').addEventListener('pointerdown',()=>togglePanel(false));
+
+  updateUI();
   if(!reduce){ newTarget(); setTimeout(scheduleBlink,1600); }
   requestAnimationFrame(loop);
 })();
