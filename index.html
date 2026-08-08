@@ -102,6 +102,7 @@
   <div class="row"><span class="lab">speed</span><input type="range" id="s_speed" min="0.1" max="4" step="0.05"><span class="val" id="v_speed">1.00</span></div>
   <div class="row"><span class="lab">bg<i>0 = black</i></span><input type="range" id="s_bg" min="0" max="3" step="0.05"><span class="val" id="v_bg">1.00</span></div>
   <div class="row"><span class="lab">zoom<i>on-screen size</i></span><input type="range" id="s_zoom" min="0.3" max="2.5" step="0.05"><span class="val" id="v_zoom">1.00</span></div>
+  <div class="row"><span class="lab">sigil<i>complexity</i></span><input type="range" id="s_sig" min="0.5" max="2.5" step="0.05"><span class="val" id="v_sig">1.00</span></div>
   <div class="row"><span class="lab">color</span><input type="color" id="s_color" value="#c8deff"></div>
   <div class="row"><div class="segs">
     <button class="seg" id="btnOrig">original</button>
@@ -118,8 +119,8 @@
   const wrap=document.getElementById('wrap');
   let W,H,frameT=0, lowPower=false, lastDraw=0, aT=0;
   // adjustable look/feel (menu sliders); FACTORY is the built-in default look
-  const FACTORY={ brightness:1, glow:1, feather:1, contrast:1, speed:1, bg:1, zoom:1, color:[200,222,255] };
-  let brightness=1, glowAmt=1, feather=1, contrast=1, speed=1, bgLevel=1, zoom=1, baseColor=[200,222,255];
+  const FACTORY={ brightness:1, glow:1, feather:1, contrast:1, speed:1, bg:1, zoom:1, sigCx:1, color:[200,222,255] };
+  let brightness=1, glowAmt=1, feather=1, contrast=1, speed=1, bgLevel=1, zoom=1, sigCx=1, baseColor=[200,222,255];
   function resize(){ W=innerWidth;H=innerHeight;c.width=W;c.height=H;}
   addEventListener('resize',resize); resize();
 
@@ -245,29 +246,34 @@
   let sig=null, sigOld=null, sigNextMorph=0, morphStart=-1e9, morphDur=1300, glStart=0, glEnd=0, glAmt=0;
   function triggerGlitch(now,dur,amt){ if(now+dur>glEnd){ glStart=now; glEnd=now+dur; } if(amt>glAmt) glAmt=amt; }
   function buildSigil(t){
+    const C=sigCx;                       // complexity slider (1 = current default)
+    const lenF=1+0.35*(C-1);             // longer reach -> fills more of the screen
     const branches=[];
     const ring=0.13+Math.random()*0.04;
-    // main long jagged tendrils in several directions - cracks growing from core
-    const baseDirs=[-Math.PI/2, Math.PI/2, Math.PI*0.14, Math.PI-0.14];
-    for(const base of baseDirs){
+    // main long jagged tendrils - base 4 directions plus extras when C>1
+    const dirs=[-Math.PI/2, Math.PI/2, Math.PI*0.14, Math.PI-0.14];
+    const extra=Math.max(0,Math.round(4*(C-1)));
+    for(let i=0;i<extra;i++) dirs.push((i+0.5)/Math.max(1,extra)*Math.PI*2 + 0.7);
+    const offP=Math.min(0.92, 0.55*C);
+    for(const base of dirs){
       const seg=[]; let x=0,y=0, ang=base+(Math.random()*0.4-0.2);
       const steps=9+Math.floor(Math.random()*5);
       for(let i=0;i<steps;i++){
         ang += (Math.random()*2-1)*0.5;
-        const len=0.08+Math.random()*0.09;
+        const len=(0.08+Math.random()*0.09)*lenF;
         x+=Math.cos(ang)*len; y+=Math.sin(ang)*len;
         seg.push([x,y, 1-i/steps]);       // taper thickness
         // frequent small offshoots for finer, denser detail
-        if(Math.random()<0.55 && i>0){
+        if(Math.random()<offP && i>0){
           let bx=x,by=y,ba=ang+(Math.random()<0.5?1:-1)*(0.5+Math.random()*0.6);
           const bs=2+Math.floor(Math.random()*4); const off=[[x,y,0.5*(1-i/steps)]];
-          for(let j=0;j<bs;j++){ ba+=(Math.random()*2-1)*0.45; const bl=0.05+Math.random()*0.06;
+          for(let j=0;j<bs;j++){ ba+=(Math.random()*2-1)*0.45; const bl=(0.05+Math.random()*0.06)*lenF;
             bx+=Math.cos(ba)*bl; by+=Math.sin(ba)*bl; off.push([bx,by,0.42*(1-j/bs)]); }
           branches.push(off);
           // occasional twig off the offshoot -> more branching depth
           if(Math.random()<0.4){
             let tx=bx,ty=by,ta=ba+(Math.random()<0.5?1:-1)*0.9; const tw=[[bx,by,0.28]];
-            for(let k=0;k<2;k++){ ta+=(Math.random()*2-1)*0.4; const tl=0.04+Math.random()*0.04;
+            for(let k=0;k<2;k++){ ta+=(Math.random()*2-1)*0.4; const tl=(0.04+Math.random()*0.04)*lenF;
               tx+=Math.cos(ta)*tl; ty+=Math.sin(ta)*tl; tw.push([tx,ty,0.2]); }
             branches.push(tw);
           }
@@ -275,24 +281,24 @@
       }
       branches.push(seg);
     }
-    // sharp radial spikes (star burst), straight & tapering
-    const spikeCount=7+Math.floor(Math.random()*4);
+    // sharp radial spikes (star burst), straight & tapering - more with C
+    const spikeCount=Math.round((7+Math.floor(Math.random()*4))*C);
     for(let s=0;s<spikeCount;s++){
       const a=(s/spikeCount)*Math.PI*2 + (Math.random()*0.25-0.125);
-      const len=0.45+Math.random()*0.5;
+      const len=(0.45+Math.random()*0.5)*lenF;
       const seg=[]; const steps=7;
       for(let i=1;i<=steps;i++){ const r=(i/steps)*len;
         seg.push([Math.cos(a)*r, Math.sin(a)*r, 1-i/steps]); }
       branches.push(seg);
     }
-    // fine radial tick marks around the core ring - technical LED detail
-    const tickCount=16+Math.floor(Math.random()*8);
+    // fine radial tick marks around the core ring - more with C
+    const tickCount=Math.round((16+Math.floor(Math.random()*8))*C);
     for(let s=0;s<tickCount;s++){
       const a=(s/tickCount)*Math.PI*2;
       const r0=ring-0.02, r1=ring+0.05+Math.random()*0.035;
       branches.push([[Math.cos(a)*r0,Math.sin(a)*r0,0.34],[Math.cos(a)*r1,Math.sin(a)*r1,0.18]]);
     }
-    return { branches, ring, rot:Math.random()*Math.PI };
+    return { branches, ring, rot:Math.random()*Math.PI, cull:1.25+0.5*(C-1) };
   }
   // schedule morphs once per frame; morph roughly every ~30s (masked by a short glitch)
   function updateSigil(t){
@@ -309,7 +315,7 @@
     const ca=Math.cos(ang),sa=Math.sin(ang);
     const px=x*ca-y*sa, py=x*sa+y*ca;
     const r=Math.sqrt(px*px+py*py);
-    if(r>1.25) return 0;
+    if(r>(sg.cull||1.25)) return 0;
     let v=0;
     const ringW=0.038;
     v=Math.max(v, Math.max(0,1-Math.abs(r-sg.ring)/ringW)*0.95);
@@ -566,7 +572,7 @@
 
   /* ---- look/feel sliders, LED colour picker, and defaults ---- */
   const el=id=>document.getElementById(id);
-  const sB=el('s_bright'), sG=el('s_glow'), sF=el('s_feather'), sC=el('s_contrast'), sS=el('s_speed'), sBg=el('s_bg'), sZ=el('s_zoom'), sCol=el('s_color');
+  const sB=el('s_bright'), sG=el('s_glow'), sF=el('s_feather'), sC=el('s_contrast'), sS=el('s_speed'), sBg=el('s_bg'), sZ=el('s_zoom'), sSig=el('s_sig'), sCol=el('s_color');
   const hex2rgb=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
   const rgb2hex=c=>'#'+c.map(x=>('0'+Math.round(x).toString(16)).slice(-2)).join('');
   // ambient background + menu accent follow the LED colour; "bg" scales it (0 = pure black, higher = more lit)
@@ -578,17 +584,18 @@
     panel.style.setProperty('--accent', `rgb(${baseColor.map(x=>Math.round(x)).join(',')})`);
   }
   function syncInputs(){
-    sB.value=brightness; sG.value=glowAmt; sF.value=feather; sC.value=contrast; sS.value=speed; sBg.value=bgLevel; sZ.value=zoom; sCol.value=rgb2hex(baseColor);
+    sB.value=brightness; sG.value=glowAmt; sF.value=feather; sC.value=contrast; sS.value=speed; sBg.value=bgLevel; sZ.value=zoom; sSig.value=sigCx; sCol.value=rgb2hex(baseColor);
     el('v_bright').textContent=(+brightness).toFixed(2); el('v_glow').textContent=(+glowAmt).toFixed(2);
     el('v_feather').textContent=(+feather).toFixed(2); el('v_contrast').textContent=(+contrast).toFixed(2);
     el('v_speed').textContent=(+speed).toFixed(2); el('v_bg').textContent=(+bgLevel).toFixed(2);
-    el('v_zoom').textContent=(+zoom).toFixed(2);
+    el('v_zoom').textContent=(+zoom).toFixed(2); el('v_sig').textContent=(+sigCx).toFixed(2);
   }
-  const currentSettings=()=>({ brightness, glow:glowAmt, feather, contrast, speed, bg:bgLevel, zoom, color:baseColor.slice() });
+  const currentSettings=()=>({ brightness, glow:glowAmt, feather, contrast, speed, bg:bgLevel, zoom, sigCx, color:baseColor.slice() });
   function applySettings(s){
     brightness=+s.brightness; glowAmt=+s.glow; feather=(s.feather==null?1:+s.feather);
-    contrast=+s.contrast; speed=+s.speed; bgLevel=(s.bg==null?1:+s.bg); zoom=(s.zoom==null?1:+s.zoom); baseColor=s.color.slice();
-    syncInputs(); applyBg(); updateUI();
+    contrast=+s.contrast; speed=+s.speed; bgLevel=(s.bg==null?1:+s.bg); zoom=(s.zoom==null?1:+s.zoom);
+    sigCx=(s.sigCx==null?1:+s.sigCx); sig=null;   // rebuild sigil at new complexity
+    baseColor=s.color.slice(); syncInputs(); applyBg(); updateUI();
   }
   function loadDefault(){ try{ const s=JSON.parse(localStorage.getItem('anim_default')); if(s&&s.color) return s; }catch(e){} return null; }
   function updateDefaultBtns(){ el('btnMine').classList.toggle('dis', !loadDefault()); }
@@ -599,6 +606,7 @@
   sS.addEventListener('input',()=>{ speed=+sS.value; el('v_speed').textContent=speed.toFixed(2); });
   sBg.addEventListener('input',()=>{ bgLevel=+sBg.value; el('v_bg').textContent=bgLevel.toFixed(2); applyBg(); });
   sZ.addEventListener('input',()=>{ zoom=+sZ.value; el('v_zoom').textContent=zoom.toFixed(2); });
+  sSig.addEventListener('input',()=>{ sigCx=+sSig.value; el('v_sig').textContent=sigCx.toFixed(2); sig=null; });   // rebuild live
   sCol.addEventListener('input',()=>{ baseColor=hex2rgb(sCol.value); applyBg(); });
   el('btnOrig').addEventListener('pointerdown',()=>{ applySettings(FACTORY); flash('original'); });
   el('btnMine').addEventListener('pointerdown',()=>{ const d=loadDefault(); if(d){ applySettings(d); flash('my default'); } });
