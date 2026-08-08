@@ -63,6 +63,7 @@
       <button class="seg" data-mode="eyes">eyes</button>
       <button class="seg" data-mode="robo">robo</button>
       <button class="seg" data-mode="sigil">sigil</button>
+      <button class="seg" data-mode="bloom">bloom</button>
       <button class="seg" data-mode="cat">cat</button>
     </div></div>
   <div class="row" id="moodrow"><span class="lab">mood</span>
@@ -446,6 +447,43 @@
     return 0;
   }
 
+  /* ================= BLOOM MODE =================
+     Spinning radial mandala: concentric dashed rings (spin), N petal loops
+     (slow rotation), tapering cardinal spikes, hollow core, and drifting
+     twinkle stars hovering around it. */
+  const bloomRng=(s=>()=>{ s=(s*1103515245+12345)&0x7fffffff; return s/0x7fffffff; })(12345);
+  const BLOOM_STARS=[]; for(let i=0;i<16;i++) BLOOM_STARS.push([(bloomRng()*2-1)*1.15,(bloomRng()*2-1)*1.05,bloomRng()*6.283,0.7+bloomRng()*0.6]);
+  function bloomField(u,w){
+    const T=frameT, cx=gCols/2, cy=gRows/2, U=gRows;
+    const X=(u*gCols-cx)/(U*0.44), Y=(w*gRows-cy)/(U*0.44);
+    const r=Math.hypot(X,Y); const a=Math.atan2(Y,X);
+    let v=0;
+    // drifting twinkle stars (everywhere)
+    for(let i=0;i<BLOOM_STARS.length;i++){ const s=BLOOM_STARS[i];
+      const dx=X-(s[0]+0.04*Math.sin(T/1300+s[2])), dy=Y-(s[1]+0.04*Math.cos(T/1500+s[2]));
+      const tw=0.5+0.5*Math.sin(T/300+s[2]), sz=0.02*s[3]*(0.4+0.6*tw), arm=0.06*s[3]*(0.4+0.6*tw);
+      if((Math.abs(dx)<sz&&Math.abs(dy)<arm)||(Math.abs(dy)<sz&&Math.abs(dx)<arm)){ const b=0.5+0.5*tw; if(b>v)v=b; }
+    }
+    if(r>1.35) return v;
+    if(r<0.12) return v;                              // hollow dark core
+    // concentric spinning dashed rings
+    const rings=[[0.30,26,1],[0.52,40,-1],[0.72,54,1]];
+    for(let i=0;i<rings.length;i++){ const rad=rings[i][0], nd=rings[i][1], dir=rings[i][2];
+      if(Math.abs(r-rad)<0.028){ if(0.5+0.5*Math.sin(a*nd+dir*T/500)>0.55){ if(0.9>v)v=0.9; } } }
+    // petal loops (N-fold), slow rotation
+    const N=6, rot=T*0.00022;
+    for(let k=0;k<N;k++){ const ang=rot+k*6.283/N, ca=Math.cos(ang), sa=Math.sin(ang);
+      const lx=X*ca+Y*sa, ly=-X*sa+Y*ca, ex=(lx-0.46)/0.30, ey=ly/0.13, d=Math.sqrt(ex*ex+ey*ey);
+      if(Math.abs(d-1)<0.12){ if(0.8>v)v=0.8; } }
+    // tapering cardinal spikes (rotate opposite)
+    const srot=-T*0.00016;
+    for(let k=0;k<4;k++){ let da=a-(k*Math.PI/2+srot); da=Math.atan2(Math.sin(da),Math.cos(da));
+      const width=0.02+0.06*(1-Math.min(1,r));
+      if(Math.abs(da)*r<width && r<1.25){ const b=0.85*(1-r*0.5); if(b>v)v=b; } }
+    v*=(0.8+0.2*(0.5+0.5*Math.sin(T/1600)));
+    return v>1?1:v;
+  }
+
   /* ================= MODE MGMT ================= */
   let mode='eyes';
   const SIG_GLOW=[195,218,255];
@@ -469,6 +507,9 @@
       roStep();
       const cC=lowPower?100:128, cR=lowPower?50:64; gCols=cC; gRows=cR;
       render(catField, aT, cC, cR, 0.72, true, 0);
+    } else if(mode==='bloom'){
+      const bC=lowPower?116:146, bR=lowPower?56:70; gCols=bC; gRows=bR;
+      render(bloomField, aT, bC, bR, 0.6, true, 0);
     } else {
       updateSigil(aT);
       const sC=lowPower?108:144, sR=lowPower?46:60;
