@@ -460,7 +460,7 @@
   const bloomRng=(s=>()=>{ s=(s*1103515245+12345)&0x7fffffff; return s/0x7fffffff; })(9);
   // ATOM/orbital: TWO tilted rings [tilt, semiMajor, spinSpeed, phase] that spin
   // in place (minor axis oscillates edge-on<->face-on), centred on the core.
-  const BLOOM_RINGS=[[0.55,1.05,0.0016,0],[-0.65,1.0,0.0013,1.7]];
+  const BLOOM_RINGS=[[0.55,0.66,0.0016,0],[-0.65,0.60,0.0013,1.7]];
   const BLOOM_STARS=[]; for(let i=0;i<6;i++) BLOOM_STARS.push([(bloomRng()*2-1)*1.3,(bloomRng()*2-1)*1.15,bloomRng()*6.283,0.6+bloomRng()*0.7]);
   function bloomField(u,w){
     const T=frameT, cx=gCols/2, cy=gRows/2, U=gRows;
@@ -474,12 +474,13 @@
       if((Math.abs(dx)<sz&&Math.abs(dy)<arm)||(Math.abs(dy)<sz&&Math.abs(dx)<arm)){ const b=0.5+0.5*tw; if(b>v)v=b; }
     }
     if(r>1.7) return v;
-    // + star rays from the core, top longest, dashed
-    const rays=[[-Math.PI/2,1.5],[Math.PI/2,1.05],[0,1.2],[Math.PI,1.2]];
+    // + star rays from the core: top & bottom LONG, sides SHORT (vertical-dominant), dashed
+    const rays=[[-Math.PI/2,1.55],[Math.PI/2,1.45],[0,0.85],[Math.PI,0.85]];
     for(let i=0;i<rays.length;i++){ let da=a-rays[i][0]; da=Math.atan2(Math.sin(da),Math.cos(da)); const L=rays[i][1];
-      if(r>0.16 && r<L && Math.abs(da)*r<0.02 && Math.sin(r*24)>-0.2){ if(0.85>v)v=0.85; } }
-    // small bright core (nucleus)
-    if(r<0.10){ return 0.95; }
+      if(r>0.20 && r<L && Math.abs(da)*r<0.02 && Math.sin(r*24)>-0.2){ if(0.85>v)v=0.85; } }
+    // hollow core with a small bright ring (like the sigil)
+    if(r<0.12) return v;
+    if(Math.abs(r-0.15)<0.03){ if(0.9>v)v=0.9; }
     // TWO spinning rings (ellipse outlines centred on core; minor axis oscillates = hoop spin)
     for(let k=0;k<BLOOM_RINGS.length;k++){ const p=BLOOM_RINGS[k], tilt=p[0], A=p[1];
       const B=A*(0.10+0.90*Math.abs(Math.cos(T*p[2]+p[3])));
