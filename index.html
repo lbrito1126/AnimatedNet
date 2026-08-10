@@ -462,7 +462,7 @@
   // star: SMALL rounded-diamond hollow core (wider than tall), LONG outlined rugged
   // blades, rotating tick-rings for intricacy in the gap, and two rugged rings that
   // clearly spin (fast rotating dashes) with a slight flip. [tilt,A,spinSpd,flipSpd,phase,offx,offy]
-  const BLOOM_RINGS=[[0.5,0.78,0.011,0.0006,0,0,0],[-0.7,0.56,-0.013,0.0007,1.6,0.10,-0.05]];
+  const BLOOM_RINGS=[[0.5,0.80,0.011,0.0006,0,0,0],[-0.7,0.58,-0.013,0.0007,1.6,0.10,-0.05]];
   const BLOOM_STARS=[]; for(let i=0;i<7;i++) BLOOM_STARS.push([(bloomRng()*2-1)*2.2,(bloomRng()*2-1)*1.15,bloomRng()*6.28]);
   function bloomField(u,w){
     const T=frameT, cx=gCols/2, cy=gRows/2, U=gRows;
@@ -473,22 +473,21 @@
       const dx=X-s[0], dy=Y-s[1], sz=0.03*(0.3+0.7*tw), arm=0.09*(0.3+0.7*tw);
       if((Math.abs(dx)<sz&&Math.abs(dy)<arm)||(Math.abs(dy)<sz&&Math.abs(dx)<arm)) v=Math.max(v,0.5+0.5*tw); }
     if(r>2.6) return v;
-    // small rounded-diamond core (wider than tall), tiny hollow centre
-    const n=1.6, Rcx=0.125, Rcy=0.098, f=Math.pow(Math.abs(X)/Rcx,n)+Math.pow(Math.abs(Y)/Rcy,n);
-    if(f>=0.42 && f<1.4){ v=Math.max(v, 0.6+0.4*(1-Math.abs(f-0.9)/0.5)); }
-    // three rotating dashed tick-rings -> denser gap intricacy (still not solid)
-    if(Math.abs(r-0.21)<0.03 && Math.sin(a*16 - T*0.0024)>-0.1) v=Math.max(v,0.7);
-    if(Math.abs(r-0.31)<0.028 && Math.sin(a*22 + T*0.0020)>0.1) v=Math.max(v,0.6);
-    if(Math.abs(r-0.40)<0.024 && Math.sin(a*28 - T*0.0018)>0.35) v=Math.max(v,0.52);
-    // LONGER outlined rugged blades, start near the small core; top&bottom longest
-    const blades=[[-Math.PI/2,1.78,0.16],[Math.PI/2,1.55,0.16],[0,1.28,0.14],[Math.PI,1.28,0.14]];
-    const cE=0.10;
+    // hollow rounded-diamond core OUTLINE (wider than tall): clear ring, empty centre
+    const n=1.7, Rcx=0.155, Rcy=0.118, f=Math.pow(Math.abs(X)/Rcx,n)+Math.pow(Math.abs(Y)/Rcy,n);
+    if(f>=0.55 && f<1.25){ v=Math.max(v, 0.7+0.3*(1-Math.abs(f-0.9)/0.35)); }
+    // rotating dashed tick-rings for gap intricacy (kept OUTSIDE the core so it stays clean)
+    if(Math.abs(r-0.30)<0.028 && Math.sin(a*22 + T*0.0020)>0.0) v=Math.max(v,0.62);
+    if(Math.abs(r-0.42)<0.024 && Math.sin(a*28 - T*0.0018)>0.3) v=Math.max(v,0.52);
+    // blades: wide at the base (stemming from the core), taper to a SHARP point; top&bottom longest
+    const blades=[[-Math.PI/2,1.80,0.20],[Math.PI/2,1.58,0.20],[0,1.14,0.16],[Math.PI,1.14,0.16]];
+    const cE=0.125;
     for(let i=0;i<blades.length;i++){ const d=blades[i][0], L=blades[i][1], wB=blades[i][2];
       const ca=Math.cos(d), sa=Math.sin(d), s=X*ca+Y*sa, p=-X*sa+Y*ca;
-      if(s>cE && s<L){ const tt=(s-cE)/(L-cE), hw=wB*(1-tt), edge=hw-Math.abs(p);
+      if(s>cE && s<L){ const tt=(s-cE)/(L-cE), hw=wB*Math.pow(1-tt,1.35), edge=hw-Math.abs(p);
         if(edge>0){ const h=bloomHsh((s*70)|0,(p*70)|0);
-          if(edge<0.020+0.024*h && h>0.10) v=Math.max(v,0.85);
-          else if(h>0.78) v=Math.max(v,0.5); } } }
+          if(edge<0.020+0.026*h && h>0.08) v=Math.max(v,0.85);
+          else if(h>0.42) v=Math.max(v,0.45+0.3*h); } } }
     // two rugged rings: fast spin (rotating dashes) + slight flip; elliptical, one offset/smaller
     for(let k=0;k<BLOOM_RINGS.length;k++){ const p=BLOOM_RINGS[k], tilt=p[0], A=p[1];
       const B=A*(0.5+0.12*Math.cos(T*p[3]+p[4]));
